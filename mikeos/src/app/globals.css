@@ -49,8 +49,8 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Smooth transitions */
-* {
+/* Smooth transitions for interactive elements only */
+a, button, input, select, textarea {
   transition-property: background-color, border-color, color;
   transition-duration: 150ms;
 }
