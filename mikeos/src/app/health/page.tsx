@@ -37,6 +37,15 @@ interface HealthEntry {
   createdAt: string;
 }
 
+interface QcInsightBundle {
+  available: boolean;
+  anomalies: Array<{ field: string; value: number; mean30: number; std30: number; zScore: number; direction: 'above' | 'below'; description: string }>;
+  regressionInsights: string[];
+  todayFeatures: { mood: number | null; steps: number | null; sleep: number | null; constitution: number | null; heart_rate: number | null; weight: number | null; [key: string]: any } | null;
+  weekTrend: { dates: string[]; moods: (number | null)[] } | null;
+  stateLabel: { date: string; label: string } | null;
+}
+
 interface WeeklyTrend {
   weekStart: string;
   avgMood: number;
@@ -90,6 +99,7 @@ export default function HealthPage() {
   const [daily, setDaily] = useState<DailyData | null>(null);
   const [trends, setTrends] = useState<WeeklyTrend | null>(null);
   const [calorieTarget, setCalorieTarget] = useState<number>(2000);
+  const [qc, setQc] = useState<QcInsightBundle | null>(null);
   const [loading, setLoading] = useState(true);
 
   // --- Mood / Energy / Anxiety ---
@@ -159,6 +169,17 @@ export default function HealthPage() {
     }
   }, []);
 
+  const fetchQc = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/qc?date=${today}`);
+      const data: QcInsightBundle = await res.json();
+      if (data.available) {
+        setQc(data);
+      }
+    } catch {
+    }
+  }, [today]);
+
   const fetchSettings = useCallback(async () => {
     try {
       const res = await fetch('/api/settings');
@@ -173,10 +194,10 @@ export default function HealthPage() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchDaily(), fetchTrends(), fetchSettings()]).finally(() =>
+    Promise.all([fetchDaily(), fetchTrends(), fetchSettings(), fetchQc()]).finally(() =>
       setLoading(false),
     );
-  }, [fetchDaily, fetchTrends, fetchSettings]);
+  }, [fetchDaily, fetchTrends, fetchSettings, fetchQc]);
 
   // -------------------------------------------------------------------
   // Handlers
@@ -445,6 +466,30 @@ export default function HealthPage() {
           </div>
         </Section>
 
+        {qc?.todayFeatures && (
+          (() => {
+            const vitals: { label: string; value: string }[] = [];
+            if (qc.todayFeatures.steps != null) vitals.push({ label: 'Steps', value: String(qc.todayFeatures.steps) });
+            if (qc.todayFeatures.constitution != null) vitals.push({ label: 'Constitution', value: `${qc.todayFeatures.constitution}/10` });
+            if (qc.todayFeatures.heart_rate != null) vitals.push({ label: 'Heart Rate', value: `${qc.todayFeatures.heart_rate} bpm` });
+            if (qc.todayFeatures.weight != null) vitals.push({ label: 'Weight', value: `${qc.todayFeatures.weight} lbs` });
+            if (vitals.length === 0) return null;
+            return (
+              <Section
+                title="QC Vitals"
+                open={openSection === 'qc-vitals'}
+                onToggle={() => toggle('qc-vitals')}
+              >
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {vitals.map(v => (
+                    <StatCard key={v.label} label={v.label} value={v.value} />
+                  ))}
+                </div>
+              </Section>
+            );
+          })()
+        )}
+
         {/* ================================================================
             MEALS
             ================================================================ */}
@@ -652,6 +697,45 @@ export default function HealthPage() {
             <p className="text-sm text-muted">No trend data available.</p>
           )}
         </Section>
+
+        {qc && qc.anomalies.length > 0 && (
+          <Section
+            title="Anomaly Flags"
+            badge={`${qc.anomalies.length}`}
+            open={openSection === 'anomalies'}
+            onToggle={() => toggle('anomalies')}
+          >
+            <ul className="space-y-1.5">
+              {qc.anomalies.map((a, i) => (
+                <li
+                  key={i}
+                  className={`text-sm ${a.direction === 'above' ? 'text-warning' : 'text-danger'}`}
+                >
+                  {a.description}
+                </li>
+              ))}
+            </ul>
+          </Section>
+        )}
+
+        {qc && qc.regressionInsights.length > 0 && (
+          <Section
+            title="Regression Insights"
+            open={openSection === 'regression'}
+            onToggle={() => toggle('regression')}
+          >
+            <ul className="space-y-1.5">
+              {qc.regressionInsights.map((r, i) => (
+                <li
+                  key={i}
+                  className="text-sm pl-3 border-l-2 border-accent py-0.5"
+                >
+                  {r}
+                </li>
+              ))}
+            </ul>
+          </Section>
+        )}
 
         {/* ================================================================
             TODAY'S ENTRIES (ALL)

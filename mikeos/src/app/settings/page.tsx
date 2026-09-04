@@ -7,15 +7,19 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
   const [exportInfo, setExportInfo] = useState<{ tables: string[]; formats: string[] } | null>(null);
+  const [qcAvailable, setQcAvailable] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [settingsRes, exportRes] = await Promise.all([
+      const [settingsRes, exportRes, qcRes] = await Promise.all([
         fetch('/api/settings'),
         fetch('/api/export'),
+        fetch('/api/qc?type=status'),
       ]);
       setSettings(await settingsRes.json());
       setExportInfo(await exportRes.json());
+      const qcData = await qcRes.json();
+      setQcAvailable(qcData.available);
     } catch { /* empty */ } finally {
       setLoading(false);
     }
@@ -174,7 +178,22 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* Export */}
+        <section className="bg-surface border border-border rounded-lg p-5">
+          <h2 className="text-sm font-medium text-muted mb-4">Quantified Claude</h2>
+          <div className="flex items-center gap-2 mb-2">
+            <span className={`inline-block w-2.5 h-2.5 rounded-full ${qcAvailable ? 'bg-success' : 'bg-border'}`} />
+            <span className="text-sm">{qcAvailable ? 'Connected' : 'Not connected'}</span>
+          </div>
+          <p className="text-xs text-muted">
+            {qcAvailable
+              ? 'Reading from ~/.quantified-claude/feature-store.sqlite'
+              : 'Place your feature-store.sqlite at ~/.quantified-claude/'}
+          </p>
+          <p className="text-xs text-muted mt-2">
+            Low-friction mode activates automatically during acute or onset states
+          </p>
+        </section>
+
         <section className="bg-surface border border-border rounded-lg p-5">
           <h2 className="text-sm font-medium text-muted mb-4">Export Your Data</h2>
           <p className="text-xs text-muted mb-3">Your data never leaves your machine. Export to standard formats anytime.</p>

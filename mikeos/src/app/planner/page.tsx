@@ -26,6 +26,13 @@ interface Task {
   createdAt: string;
 }
 
+interface QcInsightBundle {
+  available: boolean;
+  stateLabel: { date: string; label: 'acute' | 'onset' | 'pre-crash' | 'recovery' | 'stable' } | null;
+  triggerWarning: { pattern: string; recurrenceRate: number; baseRate: number; activePrecursors: string[]; present: boolean } | null;
+  interventionSuggestion: string | null;
+}
+
 function formatDateDisplay(dateStr: string): string {
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'long',
@@ -61,6 +68,7 @@ export default function PlannerPage() {
   const [taskEstimate, setTaskEstimate] = useState('');
   const [addingTask, setAddingTask] = useState(false);
   const [showTaskForm, setShowTaskForm] = useState(false);
+  const [qc, setQc] = useState<QcInsightBundle | null>(null);
 
   const fetchPlan = useCallback(async () => {
     try {
@@ -82,10 +90,20 @@ export default function PlannerPage() {
     }
   }, []);
 
+  const fetchQc = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/qc?date=${date}`);
+      const data: QcInsightBundle = await res.json();
+      setQc(data);
+    } catch {
+      setQc(null);
+    }
+  }, [date]);
+
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchPlan(), fetchTasks()]).finally(() => setLoading(false));
-  }, [fetchPlan, fetchTasks]);
+    Promise.all([fetchPlan(), fetchTasks(), fetchQc()]).finally(() => setLoading(false));
+  }, [fetchPlan, fetchTasks, fetchQc]);
 
   async function handleGeneratePlan() {
     setGenerating(true);
@@ -268,7 +286,32 @@ export default function PlannerPage() {
             </div>
           )}
 
-          {/* Generate Plan button */}
+          {qc?.available && qc.triggerWarning?.present && (
+            <div className="bg-surface border border-border border-l-4 border-l-warning rounded-lg p-4">
+              <p className="text-sm font-medium text-warning">Trigger Warning</p>
+              <p className="text-sm text-muted mt-1">
+                Pattern: {qc.triggerWarning.pattern} ({Math.round(qc.triggerWarning.recurrenceRate * 100)}% recurrence rate)
+              </p>
+              {qc.triggerWarning.activePrecursors.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {qc.triggerWarning.activePrecursors.map((precursor) => (
+                    <li key={precursor} className="text-sm text-muted flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0" />
+                      {precursor}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {qc?.available && qc.interventionSuggestion && (
+            <div className="bg-surface border border-border rounded-lg p-4">
+              <p className="text-sm font-medium">Suggested Intervention</p>
+              <p className="text-sm text-muted mt-1">{qc.interventionSuggestion}</p>
+            </div>
+          )}
+
           <button
             onClick={handleGeneratePlan}
             disabled={generating}
